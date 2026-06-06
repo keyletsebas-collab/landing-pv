@@ -383,13 +383,11 @@ function AppContent() {
             No se encontraron usuarios en el sistema.
           </div>
         ) : (
-          <div style={{ minWidth: '900px' }}>
+          <div style={{ minWidth: '600px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   <th style={{ padding: '1rem' }}>Miembro</th>
-                  <th style={{ padding: '1rem' }}>Email / Usuario</th>
-                  <th style={{ padding: '1rem' }}>Contraseña</th>
                   <th style={{ padding: '1rem' }}>Estado</th>
                   <th style={{ padding: '1rem' }}>Rol</th>
                   <th style={{ padding: '1rem', textAlign: 'right' }}>Acciones</th>
@@ -399,13 +397,6 @@ function AppContent() {
                 {filteredUsers.map(u => (
                   <tr key={u.id} className="table-row" style={{ borderBottom: '1px solid var(--border)', transition: 'background-color 0.2s' }}>
                     <td style={{ padding: '1.2rem 1rem', fontWeight: 600 }}>{u.full_name || 'Sin nombre'}</td>
-                    <td style={{ padding: '1.2rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem' }}>{u.username}</td>
-                    <td style={{ padding: '1.2rem 1rem' }}>
-                      <div style={{ display: 'inline-flex', flexDirection: 'column' }}>
-                        <span style={{ fontFamily: 'monospace', letterSpacing: '0.1em', fontSize: '0.95rem', color: 'var(--text-muted)' }}>••••••••</span>
-                        <span style={{ fontSize: '0.65rem', color: 'var(--accent)', marginTop: '2px', opacity: 0.8 }}>Bcrypt Hash (Supabase)</span>
-                      </div>
-                    </td>
                     <td style={{ padding: '1.2rem 1rem' }}>
                       <span style={{ 
                         padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
