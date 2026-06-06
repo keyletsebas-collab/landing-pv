@@ -1,0 +1,486 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from './utils/supabaseClient';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { 
+  Shield, 
+  Users, 
+  Trash2, 
+  Search, 
+  LogOut, 
+  KeyRound, 
+  Mail, 
+  UserCheck, 
+  UserX, 
+  ShieldAlert,
+  User,
+  ShieldCheck,
+  RefreshCw
+} from 'lucide-react';
+
+// Decoupled Main Component with Auth Context
+function AppContent() {
+  const { user, role, status, loading, logout } = useAuth();
+  const [users, setUsers] = useState([]);
+  const [loadingList, setLoadingList] = useState(false);
+  const [search, setSearch] = useState('');
+  const [actionLoading, setActionLoading] = useState(null);
+  
+  // Login State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  useEffect(() => {
+    if (user && role === 'admin') {
+      fetchUsers();
+    }
+  }, [user, role]);
+
+  const fetchUsers = async () => {
+    setLoadingList(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('role', { ascending: false });
+      
+      if (error) throw error;
+      if (data) setUsers(data);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      if (error) throw error;
+
+      if (data?.user) {
+        // Double check status immediately
+        const { data: profile, error: pErr } = await supabase
+          .from('profiles')
+          .select('role, status')
+          .eq('id', data.user.id)
+          .single();
+
+        if (pErr) throw pErr;
+
+        if (profile && profile.status === 'inactive') {
+          await supabase.auth.signOut();
+          throw new Error('Esta cuenta ha sido inhabilitada por un administrador.');
+        }
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setLoginError(err.message || 'Error al iniciar sesión.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const toggleAdmin = async (userId, currentRole) => {
+    setActionLoading(userId);
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('id', userId);
+      
+      if (error) throw error;
+      await fetchUsers();
+    } catch (err) {
+      alert('Error al actualizar el rol: ' + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const toggleUserStatus = async (userId, currentStatus) => {
+    setActionLoading(userId);
+    const newStatus = currentStatus === 'inactive' ? 'active' : 'inactive';
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status: newStatus })
+        .eq('id', userId);
+      
+      if (error) throw error;
+      await fetchUsers();
+    } catch (err) {
+      alert('Error al actualizar el estado: ' + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async (userId, userName) => {
+    const confirmation = confirm(
+      `¿Estás seguro de que deseas eliminar permanentemente a "${userName || 'este usuario'}"?\n\n` +
+      `Esta acción borrará su cuenta en auth.users y su perfil asociado. No se puede deshacer.`
+    );
+    if (!confirmation) return;
+
+    setActionLoading(userId);
+    try {
+      const { error } = await supabase.rpc('delete_user_by_admin', { user_to_delete: userId });
+      if (error) {
+        // Provide friendly message about setting up the RPC
+        if (error.message?.includes('does not exist')) {
+          throw new Error(
+            'La función RPC "delete_user_by_admin" no existe en Supabase.\n\n' +
+            'Por favor, asegúrate de copiar y ejecutar el código del archivo "user_deletion_setup.sql" en el SQL Editor de tu panel de Supabase.'
+          );
+        }
+        throw error;
+      }
+      await fetchUsers();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Loading Screen
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem' }}>
+        <div className="spinner"></div>
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>
+          Validando credenciales...
+        </p>
+      </div>
+    );
+  }
+
+  // 1. Not logged in -> Show Login Page
+  if (!user) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%', position: 'relative', overflow: 'hidden' }}>
+        {/* Glowing backgrounds */}
+        <div style={{ position: 'absolute', top: '10%', left: '5%', width: '300px', height: '300px', background: 'var(--accent-glow)', filter: 'blur(120px)', borderRadius: '50%', opacity: 0.4 }}></div>
+        <div style={{ position: 'absolute', bottom: '10%', right: '5%', width: '300px', height: '300px', background: 'var(--accent-glow)', filter: 'blur(120px)', borderRadius: '50%', opacity: 0.3 }}></div>
+
+        <div className="glass login-card animate">
+          <div style={{ 
+            display: 'inline-flex', 
+            padding: '16px', 
+            background: 'var(--accent)', 
+            borderRadius: '20px', 
+            marginBottom: '2rem',
+            color: '#000',
+            boxShadow: '0 10px 30px var(--accent-glow)'
+          }}>
+            <Shield size={36} />
+          </div>
+          
+          <h2 className="serif" style={{ fontSize: '2.5rem', marginBottom: '0.8rem', letterSpacing: '-0.02em', color: '#fff' }}>
+            Acceso Administrativo
+          </h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '2.5rem', fontSize: '1rem' }}>
+            Panel de control y gestión de miembros para Verbo Eterno
+          </p>
+
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            <div style={{ position: 'relative', textAlign: 'left' }}>
+              <span style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }}>
+                <Mail size={18} />
+              </span>
+              <input
+                type="email"
+                placeholder="Correo electrónico del Administrador"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                style={{ paddingLeft: '2.8rem', marginBottom: '0' }}
+              />
+            </div>
+
+            <div style={{ position: 'relative', textAlign: 'left' }}>
+              <span style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }}>
+                <KeyRound size={18} />
+              </span>
+              <input
+                type="password"
+                placeholder="Contraseña"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{ paddingLeft: '2.8rem', marginBottom: '0' }}
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              className="btn-primary" 
+              style={{ width: '100%', justifyContent: 'center', height: '52px', fontSize: '1.05rem', marginTop: '1rem' }}
+              disabled={loginLoading}
+            >
+              {loginLoading ? <span className="spinner-sm" /> : 'Acceder al Panel'}
+            </button>
+          </form>
+
+          {loginError && (
+            <div className="glass-heavy" style={{ 
+              marginTop: '1.5rem', 
+              padding: '1rem', 
+              borderRadius: '12px',
+              borderLeft: '4px solid #ef4444',
+              textAlign: 'left'
+            }}>
+              <p style={{ color: '#f87171', fontWeight: 500, fontSize: '0.9rem' }}>
+                {loginError}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Logged in but NOT Admin -> Show Access Denied
+  if (role !== 'admin') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%', padding: '1rem' }}>
+        <div className="glass" style={{ maxWidth: '500px', width: '100%', padding: '3rem', textAlign: 'center' }}>
+          <div style={{ color: '#ef4444', display: 'inline-flex', padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%', marginBottom: '1.5rem' }}>
+            <ShieldAlert size={48} />
+          </div>
+          <h2 style={{ fontSize: '2rem', marginBottom: '1rem', color: '#fff' }}>Acceso Denegado</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.95rem', lineHeight: '1.6' }}>
+            Esta aplicación es de uso exclusivo para administradores de <strong>Verbo Eterno</strong>. Su cuenta actual ({user.email}) no cuenta con privilegios administrativos.
+          </p>
+          <button onClick={logout} className="btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>
+            <LogOut size={18} />
+            <span>Cerrar Sesión</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Logged in and Admin -> Show Dashboard
+  const filteredUsers = users.filter(u => 
+    u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    u.username?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalUsers = users.length;
+  const adminCount = users.filter(u => u.role === 'admin').length;
+  const activeCount = users.filter(u => u.status !== 'inactive').length;
+  const inactiveCount = users.filter(u => u.status === 'inactive').length;
+
+  return (
+    <div className="app-container animate">
+      {/* Top Header */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '3rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ padding: '10px', background: 'var(--accent)', borderRadius: '12px', color: '#000' }}>
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>Gestión de Cuentas</h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '0.2rem' }}>Verbo Eterno • Panel Administrativo</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'none', md: 'inline' }}>
+            Conectado: <strong style={{ color: '#fff' }}>{user.email}</strong>
+          </span>
+          <button onClick={logout} className="btn-ghost" style={{ padding: '0.7rem 1.2rem' }}>
+            <LogOut size={16} />
+            <span>Cerrar Sesión</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Stats Cards */}
+      <section className="stats-grid">
+        <div className="glass stat-card">
+          <div className="stat-icon-container" style={{ background: 'rgba(212, 175, 55, 0.1)', color: 'var(--accent)' }}>
+            <Users size={24} />
+          </div>
+          <div>
+            <div className="stat-value">{totalUsers}</div>
+            <div className="stat-label">Cuentas Totales</div>
+          </div>
+        </div>
+
+        <div className="glass stat-card">
+          <div className="stat-icon-container" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
+            <Shield size={24} />
+          </div>
+          <div>
+            <div className="stat-value">{adminCount}</div>
+            <div className="stat-label">Administradores</div>
+          </div>
+        </div>
+
+        <div className="glass stat-card">
+          <div className="stat-icon-container" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e' }}>
+            <UserCheck size={24} />
+          </div>
+          <div>
+            <div className="stat-value">{activeCount}</div>
+            <div className="stat-label">Cuentas Activas</div>
+          </div>
+        </div>
+
+        <div className="glass stat-card">
+          <div className="stat-icon-container" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+            <UserX size={24} />
+          </div>
+          <div>
+            <div className="stat-value">{inactiveCount}</div>
+            <div className="stat-label">Inhabilitadas</div>
+          </div>
+        </div>
+      </section>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="glass" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.6rem 1.2rem', flex: 1, minWidth: '280px' }}>
+          <Search size={18} color="var(--text-muted)" />
+          <input
+            placeholder="Buscar por nombre o correo electrónico..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-main)', width: '100%', fontSize: '0.95rem' }}
+          />
+        </div>
+        <button 
+          onClick={fetchUsers} 
+          className="btn-ghost" 
+          disabled={loadingList} 
+          style={{ padding: '0.8rem 1.2rem' }}
+          title="Recargar lista"
+        >
+          <RefreshCw size={16} className={loadingList ? 'spinner-sm' : ''} />
+          <span>Actualizar</span>
+        </button>
+      </div>
+
+      {/* Main Table */}
+      <div className="glass" style={{ padding: '1.5rem', overflowX: 'auto', minHeight: '40vh' }}>
+        {loadingList ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem 0', gap: '1rem' }}>
+            <div className="spinner" style={{ width: '30px', height: '30px' }} />
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Obteniendo base de datos...</p>
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '5rem 0', color: 'var(--text-muted)' }}>
+            No se encontraron usuarios en el sistema.
+          </div>
+        ) : (
+          <div style={{ minWidth: '900px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <th style={{ padding: '1rem' }}>Miembro</th>
+                  <th style={{ padding: '1rem' }}>Email / Usuario</th>
+                  <th style={{ padding: '1rem' }}>Contraseña</th>
+                  <th style={{ padding: '1rem' }}>Estado</th>
+                  <th style={{ padding: '1rem' }}>Rol</th>
+                  <th style={{ padding: '1rem', textAlign: 'right' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map(u => (
+                  <tr key={u.id} className="table-row" style={{ borderBottom: '1px solid var(--border)', transition: 'background-color 0.2s' }}>
+                    <td style={{ padding: '1.2rem 1rem', fontWeight: 600 }}>{u.full_name || 'Sin nombre'}</td>
+                    <td style={{ padding: '1.2rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem' }}>{u.username}</td>
+                    <td style={{ padding: '1.2rem 1rem' }}>
+                      <div style={{ display: 'inline-flex', flexDirection: 'column' }}>
+                        <span style={{ fontFamily: 'monospace', letterSpacing: '0.1em', fontSize: '0.95rem', color: 'var(--text-muted)' }}>••••••••</span>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--accent)', marginTop: '2px', opacity: 0.8 }}>Bcrypt Hash (Supabase)</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '1.2rem 1rem' }}>
+                      <span style={{ 
+                        padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                        background: u.status === 'inactive' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                        color: u.status === 'inactive' ? '#f87171' : '#4ade80',
+                        textTransform: 'uppercase', letterSpacing: '0.03em'
+                      }}>{u.status === 'inactive' ? 'Inactivo' : 'Activo'}</span>
+                    </td>
+                    <td style={{ padding: '1.2rem 1rem' }}>
+                      <span style={{ 
+                        padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                        background: u.role === 'admin' ? 'rgba(212, 175, 55, 0.15)' : 'rgba(255,255,255,0.05)',
+                        color: u.role === 'admin' ? 'var(--accent)' : 'var(--text-muted)',
+                        textTransform: 'uppercase', letterSpacing: '0.03em'
+                      }}>{u.role === 'admin' ? 'Admin' : 'Usuario'}</span>
+                    </td>
+                    <td style={{ padding: '1.2rem 1rem', textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center' }}>
+                        {/* Toggle Admin */}
+                        <button 
+                          disabled={actionLoading === u.id || u.id === user.id}
+                          onClick={() => toggleAdmin(u.id, u.role)}
+                          className="btn-ghost"
+                          style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                          title={u.id === user.id ? 'No puedes quitarte el rol de Admin a ti mismo' : ''}
+                        >
+                          {actionLoading === u.id ? '...' : (u.role === 'admin' ? 'Degradar' : 'Hacer Admin')}
+                        </button>
+                        
+                        {/* Toggle Status */}
+                        <button 
+                          disabled={actionLoading === u.id || u.id === user.id}
+                          onClick={() => toggleUserStatus(u.id, u.status)}
+                          className="btn-ghost"
+                          style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', color: u.status === 'inactive' ? '#4ade80' : '#ff9800' }}
+                          title={u.id === user.id ? 'No puedes inhabilitarte a ti mismo' : ''}
+                        >
+                          {actionLoading === u.id ? '...' : (u.status === 'inactive' ? 'Habilitar' : 'Inhabilitar')}
+                        </button>
+
+                        {/* Delete User */}
+                        <button 
+                          disabled={actionLoading === u.id || u.id === user.id}
+                          onClick={() => handleDeleteUser(u.id, u.full_name || u.username)}
+                          className="btn-ghost"
+                          style={{ color: '#ef4444', padding: '0.4rem 0.6rem', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.05)' }}
+                          title={u.id === user.id ? 'No puedes eliminar tu propia cuenta' : 'Eliminar permanentemente'}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        .table-row:hover {
+          background-color: rgba(255, 255, 255, 0.015);
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+export default App;
