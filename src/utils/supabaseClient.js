@@ -35,17 +35,7 @@ try {
   }
 } catch (e) { /* ignore */ }
 
-export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder', {
-  auth: {
-    storageKey: 'poesia-viva-auth-v5',
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce',
-    lock: async (name, acquire) => {
-      const fn = typeof name === 'function' ? name : acquire;
-      if (typeof fn === 'function') return await fn();
-      return {};
-    }
-  }
-});
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder'
+);
