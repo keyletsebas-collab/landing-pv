@@ -19,6 +19,7 @@ function App() {
   const [loadingList, setLoadingList] = useState(false);
   const [search, setSearch] = useState('');
   const [actionLoading, setActionLoading] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -26,6 +27,7 @@ function App() {
 
   const fetchUsers = async () => {
     setLoadingList(true);
+    setError(null);
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -36,6 +38,7 @@ function App() {
       if (data) setUsers(data);
     } catch (err) {
       console.error('Error fetching users:', err);
+      setError(err.message || JSON.stringify(err));
     } finally {
       setLoadingList(false);
     }
@@ -219,6 +222,21 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem 0', gap: '1rem' }}>
             <div className="spinner" style={{ width: '30px', height: '30px' }} />
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Obteniendo base de datos...</p>
+          </div>
+        ) : error ? (
+          <div style={{ textAlign: 'center', padding: '4rem 2rem', color: '#ef4444' }}>
+            <p style={{ fontWeight: 600, fontSize: '1.25rem', marginBottom: '1rem' }}>⚠️ Error de Conexión con la Base de Datos</p>
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto 2rem auto', lineHeight: '1.6' }}>
+              Detalle del error: <strong>{error}</strong>
+            </p>
+            <div className="glass-heavy" style={{ display: 'inline-block', padding: '1.5rem', borderRadius: '16px', textAlign: 'left', fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '500px' }}>
+              <p style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.5rem' }}>Posibles soluciones:</p>
+              <ul style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <li>Asegúrate de haber configurado <code>VITE_SUPABASE_URL</code> y <code>VITE_SUPABASE_ANON_KEY</code> en tu panel de Vercel.</li>
+                <li>Verifica que hayas realizado un <strong>Redeploy</strong> de la landing en Vercel después de guardar las variables.</li>
+                <li>Si estás en local, comprueba que el archivo <code>.env</code> exista en esta carpeta y tenga las llaves correctas.</li>
+              </ul>
+            </div>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '5rem 0', color: 'var(--text-muted)' }}>
