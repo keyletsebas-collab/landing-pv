@@ -1,41 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './utils/supabaseClient';
-import { AuthProvider, useAuth } from './context/AuthContext';
 import { 
   Shield, 
   Users, 
   Trash2, 
   Search, 
-  LogOut, 
   KeyRound, 
   Mail, 
   UserCheck, 
   UserX, 
-  ShieldAlert,
   User,
   ShieldCheck,
   RefreshCw
 } from 'lucide-react';
 
-// Decoupled Main Component with Auth Context
-function AppContent() {
-  const { user, role, status, loading, logout } = useAuth();
+function App() {
   const [users, setUsers] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [search, setSearch] = useState('');
   const [actionLoading, setActionLoading] = useState(null);
-  
-  // Login State
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState('');
 
   useEffect(() => {
-    if (user && role === 'admin') {
-      fetchUsers();
-    }
-  }, [user, role]);
+    fetchUsers();
+  }, []);
 
   const fetchUsers = async () => {
     setLoadingList(true);
@@ -54,50 +41,25 @@ function AppContent() {
     }
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginError('');
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      if (error) throw error;
-
-      if (data?.user) {
-        // Double check status immediately
-        const { data: profile, error: pErr } = await supabase
-          .from('profiles')
-          .select('role, status')
-          .eq('id', data.user.id)
-          .single();
-
-        if (pErr) throw pErr;
-
-        if (profile && profile.status === 'inactive') {
-          await supabase.auth.signOut();
-          throw new Error('Esta cuenta ha sido inhabilitada por un administrador.');
-        }
-      }
-    } catch (err) {
-      console.error('Login error:', err);
-      setLoginError(err.message || 'Error al iniciar sesión.');
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const toggleAdmin = async (userId, currentRole) => {
+  const toggleAdmin = async (userId, currentRole, currentStatus) => {
     setActionLoading(userId);
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ role: newRole })
-        .eq('id', userId);
+      const { error } = await supabase.rpc('update_profile_by_admin', {
+        user_to_update: userId,
+        new_role: newRole,
+        new_status: currentStatus
+      });
       
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('does not exist')) {
+          throw new Error(
+            'La función RPC "update_profile_by_admin" no existe en Supabase.\n\n' +
+            'Por favor, asegúrate de ejecutar el código del archivo "user_deletion_setup.sql" en tu consola de Supabase.'
+          );
+        }
+        throw error;
+      }
       await fetchUsers();
     } catch (err) {
       alert('Error al actualizar el rol: ' + err.message);
@@ -106,16 +68,25 @@ function AppContent() {
     }
   };
 
-  const toggleUserStatus = async (userId, currentStatus) => {
+  const toggleUserStatus = async (userId, currentRole, currentStatus) => {
     setActionLoading(userId);
     const newStatus = currentStatus === 'inactive' ? 'active' : 'inactive';
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ status: newStatus })
-        .eq('id', userId);
+      const { error } = await supabase.rpc('update_profile_by_admin', {
+        user_to_update: userId,
+        new_role: currentRole,
+        new_status: newStatus
+      });
       
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('does not exist')) {
+          throw new Error(
+            'La función RPC "update_profile_by_admin" no existe en Supabase.\n\n' +
+            'Por favor, asegúrate de ejecutar el código del archivo "user_deletion_setup.sql" en tu consola de Supabase.'
+          );
+        }
+        throw error;
+      }
       await fetchUsers();
     } catch (err) {
       alert('Error al actualizar el estado: ' + err.message);
@@ -135,11 +106,10 @@ function AppContent() {
     try {
       const { error } = await supabase.rpc('delete_user_by_admin', { user_to_delete: userId });
       if (error) {
-        // Provide friendly message about setting up the RPC
         if (error.message?.includes('does not exist')) {
           throw new Error(
             'La función RPC "delete_user_by_admin" no existe en Supabase.\n\n' +
-            'Por favor, asegúrate de copiar y ejecutar el código del archivo "user_deletion_setup.sql" en el SQL Editor de tu panel de Supabase.'
+            'Por favor, asegúrate de ejecutar el código del archivo "user_deletion_setup.sql" en tu consola de Supabase.'
           );
         }
         throw error;
@@ -152,125 +122,6 @@ function AppContent() {
     }
   };
 
-  // Loading Screen
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem' }}>
-        <div className="spinner"></div>
-        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>
-          Validando credenciales...
-        </p>
-      </div>
-    );
-  }
-
-  // 1. Not logged in -> Show Login Page
-  if (!user) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%', position: 'relative', overflow: 'hidden' }}>
-        {/* Glowing backgrounds */}
-        <div style={{ position: 'absolute', top: '10%', left: '5%', width: '300px', height: '300px', background: 'var(--accent-glow)', filter: 'blur(120px)', borderRadius: '50%', opacity: 0.4 }}></div>
-        <div style={{ position: 'absolute', bottom: '10%', right: '5%', width: '300px', height: '300px', background: 'var(--accent-glow)', filter: 'blur(120px)', borderRadius: '50%', opacity: 0.3 }}></div>
-
-        <div className="glass login-card animate">
-          <div style={{ 
-            display: 'inline-flex', 
-            padding: '16px', 
-            background: 'var(--accent)', 
-            borderRadius: '20px', 
-            marginBottom: '2rem',
-            color: '#000',
-            boxShadow: '0 10px 30px var(--accent-glow)'
-          }}>
-            <Shield size={36} />
-          </div>
-          
-          <h2 className="serif" style={{ fontSize: '2.5rem', marginBottom: '0.8rem', letterSpacing: '-0.02em', color: '#fff' }}>
-            Acceso Administrativo
-          </h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '2.5rem', fontSize: '1rem' }}>
-            Panel de control y gestión de miembros para Verbo Eterno
-          </p>
-
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-            <div style={{ position: 'relative', textAlign: 'left' }}>
-              <span style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }}>
-                <Mail size={18} />
-              </span>
-              <input
-                type="email"
-                placeholder="Correo electrónico del Administrador"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={{ paddingLeft: '2.8rem', marginBottom: '0' }}
-              />
-            </div>
-
-            <div style={{ position: 'relative', textAlign: 'left' }}>
-              <span style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }}>
-                <KeyRound size={18} />
-              </span>
-              <input
-                type="password"
-                placeholder="Contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                style={{ paddingLeft: '2.8rem', marginBottom: '0' }}
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              className="btn-primary" 
-              style={{ width: '100%', justifyContent: 'center', height: '52px', fontSize: '1.05rem', marginTop: '1rem' }}
-              disabled={loginLoading}
-            >
-              {loginLoading ? <span className="spinner-sm" /> : 'Acceder al Panel'}
-            </button>
-          </form>
-
-          {loginError && (
-            <div className="glass-heavy" style={{ 
-              marginTop: '1.5rem', 
-              padding: '1rem', 
-              borderRadius: '12px',
-              borderLeft: '4px solid #ef4444',
-              textAlign: 'left'
-            }}>
-              <p style={{ color: '#f87171', fontWeight: 500, fontSize: '0.9rem' }}>
-                {loginError}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // 2. Logged in but NOT Admin -> Show Access Denied
-  if (role !== 'admin') {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%', padding: '1rem' }}>
-        <div className="glass" style={{ maxWidth: '500px', width: '100%', padding: '3rem', textAlign: 'center' }}>
-          <div style={{ color: '#ef4444', display: 'inline-flex', padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%', marginBottom: '1.5rem' }}>
-            <ShieldAlert size={48} />
-          </div>
-          <h2 style={{ fontSize: '2rem', marginBottom: '1rem', color: '#fff' }}>Acceso Denegado</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.95rem', lineHeight: '1.6' }}>
-            Esta aplicación es de uso exclusivo para administradores de <strong>Verbo Eterno</strong>. Su cuenta actual ({user.email}) no cuenta con privilegios administrativos.
-          </p>
-          <button onClick={logout} className="btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>
-            <LogOut size={18} />
-            <span>Cerrar Sesión</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // 3. Logged in and Admin -> Show Dashboard
   const filteredUsers = users.filter(u => 
     u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
     u.username?.toLowerCase().includes(search.toLowerCase())
@@ -291,17 +142,8 @@ function AppContent() {
           </div>
           <div>
             <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>Gestión de Cuentas</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '0.2rem' }}>Verbo Eterno • Panel Administrativo</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '0.2rem' }}>Verbo Eterno • Panel Administrativo Directo</p>
           </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'none', md: 'inline' }}>
-            Conectado: <strong style={{ color: '#fff' }}>{user.email}</strong>
-          </span>
-          <button onClick={logout} className="btn-ghost" style={{ padding: '0.7rem 1.2rem' }}>
-            <LogOut size={16} />
-            <span>Cerrar Sesión</span>
-          </button>
         </div>
       </header>
 
@@ -426,33 +268,30 @@ function AppContent() {
                       <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center' }}>
                         {/* Toggle Admin */}
                         <button 
-                          disabled={actionLoading === u.id || u.id === user.id}
-                          onClick={() => toggleAdmin(u.id, u.role)}
+                          disabled={actionLoading === u.id}
+                          onClick={() => toggleAdmin(u.id, u.role, u.status)}
                           className="btn-ghost"
                           style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                          title={u.id === user.id ? 'No puedes quitarte el rol de Admin a ti mismo' : ''}
                         >
                           {actionLoading === u.id ? '...' : (u.role === 'admin' ? 'Degradar' : 'Hacer Admin')}
                         </button>
                         
                         {/* Toggle Status */}
                         <button 
-                          disabled={actionLoading === u.id || u.id === user.id}
-                          onClick={() => toggleUserStatus(u.id, u.status)}
+                          disabled={actionLoading === u.id}
+                          onClick={() => toggleUserStatus(u.id, u.role, u.status)}
                           className="btn-ghost"
                           style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', color: u.status === 'inactive' ? '#4ade80' : '#ff9800' }}
-                          title={u.id === user.id ? 'No puedes inhabilitarte a ti mismo' : ''}
                         >
                           {actionLoading === u.id ? '...' : (u.status === 'inactive' ? 'Habilitar' : 'Inhabilitar')}
                         </button>
 
                         {/* Delete User */}
                         <button 
-                          disabled={actionLoading === u.id || u.id === user.id}
+                          disabled={actionLoading === u.id}
                           onClick={() => handleDeleteUser(u.id, u.full_name || u.username)}
                           className="btn-ghost"
                           style={{ color: '#ef4444', padding: '0.4rem 0.6rem', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.05)' }}
-                          title={u.id === user.id ? 'No puedes eliminar tu propia cuenta' : 'Eliminar permanentemente'}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -472,14 +311,6 @@ function AppContent() {
         }
       `}</style>
     </div>
-  );
-}
-
-function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
   );
 }
 
