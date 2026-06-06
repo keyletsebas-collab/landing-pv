@@ -226,9 +226,19 @@ function App() {
         ) : error ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem', color: '#ef4444' }}>
             <p style={{ fontWeight: 600, fontSize: '1.25rem', marginBottom: '1rem' }}>⚠️ Error de Conexión con la Base de Datos</p>
-            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto 2rem auto', lineHeight: '1.6' }}>
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto 1.5rem auto', lineHeight: '1.6' }}>
               Detalle del error: <strong>{error}</strong>
             </p>
+
+            <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center', fontSize: '0.85rem' }}>
+              <div className="glass-heavy" style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                VITE_SUPABASE_URL detectado: <strong style={{ color: '#fff' }}>{import.meta.env.VITE_SUPABASE_URL || 'VACÍO (No detectado)'}</strong>
+              </div>
+              <div className="glass-heavy" style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                VITE_SUPABASE_ANON_KEY detectado: <strong style={{ color: '#fff' }}>{import.meta.env.VITE_SUPABASE_ANON_KEY ? `SÍ (Longitud: ${import.meta.env.VITE_SUPABASE_ANON_KEY.length} caracteres)` : 'VACÍO (No detectado)'}</strong>
+              </div>
+            </div>
+
             <div className="glass-heavy" style={{ display: 'inline-block', padding: '1.5rem', borderRadius: '16px', textAlign: 'left', fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '500px' }}>
               <p style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.5rem' }}>Posibles soluciones:</p>
               <ul style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
