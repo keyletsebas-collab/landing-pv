@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './utils/supabaseClient';
-import { Shield, Users, Trash2, Search, UserCheck, UserX, ShieldCheck, RefreshCw, Eye, EyeOff, Pencil, Check, X } from 'lucide-react';
+import { supabase, supabaseAdmin } from './utils/supabaseClient';
+import {
+  Shield, Users, Trash2, Search, UserCheck, UserX, ShieldCheck,
+  RefreshCw, Eye, EyeOff, KeyRound, Check, X, Loader2
+} from 'lucide-react';
 
 function App() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [search, setSearch] = useState('');
+  const [users, setUsers]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [search, setSearch]         = useState('');
   const [actionLoading, setActionLoading] = useState(null);
   const [showPasswords, setShowPasswords] = useState(false);
-  const [editingPwd, setEditingPwd] = useState(null); // userId being edited
-  const [pwdInput, setPwdInput] = useState('');
+
+  // Password change modal state
+  const [pwdModal, setPwdModal]     = useState(null); // { id, name, currentRef }
+  const [newPwd, setNewPwd]         = useState('');
+  const [pwdLoading, setPwdLoading] = useState(false);
+  const [pwdError, setPwdError]     = useState('');
+  const [pwdSuccess, setPwdSuccess] = useState('');
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -22,7 +30,7 @@ function App() {
       .select('*')
       .order('role', { ascending: false });
     if (error) {
-      setError(error.message + ' | code: ' + error.code + ' | details: ' + JSON.stringify(error.details));
+      setError(error.message + ' | code: ' + error.code);
     } else {
       setUsers(data || []);
     }
@@ -60,24 +68,44 @@ function App() {
     setActionLoading(null);
   };
 
-  const startEditPwd = (userId, currentPwd) => {
-    setEditingPwd(userId);
-    setPwdInput(currentPwd || '');
+  // ── Change password ─────────────────────────────────────────────────────
+  const openPwdModal = (u) => {
+    setPwdModal({ id: u.id, name: u.full_name || u.username, currentRef: u.password_ref || '' });
+    setNewPwd('');
+    setPwdError('');
+    setPwdSuccess('');
   };
 
-  const savePwd = async (userId) => {
-    setActionLoading(userId + '-pwd');
-    const { error } = await supabase
-      .from('profiles')
-      .update({ password_ref: pwdInput.trim() || null })
-      .eq('id', userId);
-    if (error) alert('Error guardando contraseña: ' + error.message);
-    else {
-      setEditingPwd(null);
-      setPwdInput('');
-      await fetchUsers();
+  const changePassword = async () => {
+    if (!newPwd || newPwd.length < 6) {
+      setPwdError('La contraseña debe tener al menos 6 caracteres.');
+      return;
     }
-    setActionLoading(null);
+    setPwdLoading(true);
+    setPwdError('');
+    setPwdSuccess('');
+
+    try {
+      // 1. Change actual Supabase Auth password
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+        pwdModal.id,
+        { password: newPwd }
+      );
+      if (authError) throw new Error('Auth: ' + authError.message);
+
+      // 2. Save reference in profiles table
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ password_ref: newPwd })
+        .eq('id', pwdModal.id);
+      if (dbError) throw new Error('DB: ' + dbError.message);
+
+      setPwdSuccess(`✅ Contraseña de ${pwdModal.name} actualizada correctamente.`);
+      await fetchUsers();
+    } catch (err) {
+      setPwdError(err.message);
+    }
+    setPwdLoading(false);
   };
 
   const filtered = users.filter(u =>
@@ -92,6 +120,84 @@ function App() {
 
   return (
     <div className="app-container animate">
+
+      {/* ── Password change modal ── */}
+      {pwdModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)',
+          backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 999, padding: '1.5rem'
+        }}>
+          <div className="glass-heavy" style={{ width: '100%', maxWidth: '440px', padding: '2rem', borderRadius: '16px', animation: 'slideUp .25s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '.7rem' }}>
+                <div style={{ padding: '8px', background: 'rgba(212,175,55,.15)', borderRadius: '10px' }}>
+                  <KeyRound size={20} color="var(--accent)" />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>Cambiar Contraseña</div>
+                  <div style={{ fontSize: '.78rem', color: 'var(--text-muted)' }}>{pwdModal.name}</div>
+                </div>
+              </div>
+              <button onClick={() => setPwdModal(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {pwdModal.currentRef && (
+              <div style={{ marginBottom: '1.2rem', padding: '.8rem 1rem', background: 'rgba(255,255,255,.04)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '.3rem' }}>Contraseña actual (referencia)</div>
+                <div style={{ fontFamily: 'monospace', fontSize: '.95rem', color: 'var(--accent)', letterSpacing: showPasswords ? 0 : '.12em' }}>
+                  {showPasswords ? pwdModal.currentRef : '•'.repeat(Math.min(pwdModal.currentRef.length, 12))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginBottom: '1.2rem' }}>
+              <div style={{ fontSize: '.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '.5rem' }}>
+                Nueva contraseña
+              </div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPasswords ? 'text' : 'password'}
+                  value={newPwd}
+                  onChange={e => setNewPwd(e.target.value)}
+                  placeholder="Mínimo 6 caracteres..."
+                  onKeyDown={e => e.key === 'Enter' && changePassword()}
+                  autoFocus
+                  style={{ paddingRight: '2.5rem' }}
+                />
+                <button onClick={() => setShowPasswords(!showPasswords)}
+                  style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+                  {showPasswords ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {pwdError && (
+              <div style={{ marginBottom: '1rem', padding: '.7rem 1rem', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: '8px', fontSize: '.82rem', color: '#f87171' }}>
+                ⚠️ {pwdError}
+              </div>
+            )}
+            {pwdSuccess && (
+              <div style={{ marginBottom: '1rem', padding: '.7rem 1rem', background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.3)', borderRadius: '8px', fontSize: '.82rem', color: '#4ade80' }}>
+                {pwdSuccess}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '.8rem' }}>
+              <button onClick={changePassword} disabled={pwdLoading} className="btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                {pwdLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Cambiando...</> : <><Check size={16} /> Cambiar Contraseña</>}
+              </button>
+              <button onClick={() => setPwdModal(null)} className="btn-ghost" style={{ padding: '.75rem 1rem' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '3rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
         <div style={{ padding: '10px', background: 'var(--accent)', borderRadius: '12px', color: '#000' }}>
@@ -106,10 +212,10 @@ function App() {
       {/* Stats */}
       <section className="stats-grid">
         {[
-          { icon: <Users size={24}/>, value: total, label: 'Cuentas Totales', bg: 'rgba(212,175,55,.1)', color: 'var(--accent)' },
-          { icon: <Shield size={24}/>, value: admins, label: 'Administradores', bg: 'rgba(59,130,246,.1)', color: '#3b82f6' },
-          { icon: <UserCheck size={24}/>, value: active, label: 'Activas', bg: 'rgba(34,197,94,.1)', color: '#22c55e' },
-          { icon: <UserX size={24}/>, value: inactive, label: 'Inhabilitadas', bg: 'rgba(239,68,68,.1)', color: '#ef4444' },
+          { icon: <Users size={24}/>, value: total,    label: 'Cuentas Totales',  bg: 'rgba(212,175,55,.1)', color: 'var(--accent)' },
+          { icon: <Shield size={24}/>, value: admins,  label: 'Administradores',  bg: 'rgba(59,130,246,.1)', color: '#3b82f6' },
+          { icon: <UserCheck size={24}/>, value: active, label: 'Activas',        bg: 'rgba(34,197,94,.1)',  color: '#22c55e' },
+          { icon: <UserX size={24}/>, value: inactive, label: 'Inhabilitadas',    bg: 'rgba(239,68,68,.1)', color: '#ef4444' },
         ].map((s, i) => (
           <div key={i} className="glass stat-card">
             <div className="stat-icon-container" style={{ background: s.bg, color: s.color }}>{s.icon}</div>
@@ -156,12 +262,12 @@ function App() {
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '5rem 0', color: 'var(--text-muted)' }}>No se encontraron usuarios.</div>
         ) : (
-          <div style={{ minWidth: '900px' }}>
+          <div style={{ minWidth: '960px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', fontSize: '.82rem', textTransform: 'uppercase', letterSpacing: '.05em' }}>
                   <th style={{ padding: '1rem' }}>Miembro</th>
-                  <th style={{ padding: '1rem' }}>Email / Usuario</th>
+                  <th style={{ padding: '1rem' }}>Email</th>
                   <th style={{ padding: '1rem' }}>Contraseña</th>
                   <th style={{ padding: '1rem' }}>Estado</th>
                   <th style={{ padding: '1rem' }}>Rol</th>
@@ -171,54 +277,32 @@ function App() {
               <tbody>
                 {filtered.map(u => (
                   <tr key={u.id} className="table-row" style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '1.1rem 1rem', fontWeight: 600 }}>{u.full_name || 'Sin nombre'}</td>
+                    <td style={{ padding: '1.1rem 1rem', fontWeight: 600, color: 'var(--text-main)' }}>{u.full_name || 'Sin nombre'}</td>
                     <td style={{ padding: '1.1rem 1rem', color: 'var(--text-muted)', fontSize: '.88rem' }}>{u.username}</td>
 
                     {/* Password cell */}
-                    <td style={{ padding: '.7rem 1rem' }}>
-                      {editingPwd === u.id ? (
-                        <div style={{ display: 'flex', gap: '.4rem', alignItems: 'center' }}>
-                          <input
-                            value={pwdInput}
-                            onChange={e => setPwdInput(e.target.value)}
-                            placeholder="Escribe la contraseña..."
-                            style={{ padding: '.35rem .7rem', fontSize: '.85rem', borderRadius: '7px',
-                              background: 'rgba(0,0,0,.3)', border: '1px solid rgba(212,175,55,.4)',
-                              color: 'var(--text-main)', outline: 'none', width: '160px' }}
-                            autoFocus
-                            onKeyDown={e => { if (e.key === 'Enter') savePwd(u.id); if (e.key === 'Escape') { setEditingPwd(null); setPwdInput(''); } }}
-                          />
-                          <button onClick={() => savePwd(u.id)} disabled={actionLoading === u.id + '-pwd'}
-                            style={{ padding: '.35rem .5rem', borderRadius: '6px', background: 'rgba(34,197,94,.15)',
-                              border: '1px solid rgba(34,197,94,.3)', color: '#4ade80', cursor: 'pointer' }}>
-                            <Check size={14} />
-                          </button>
-                          <button onClick={() => { setEditingPwd(null); setPwdInput(''); }}
-                            style={{ padding: '.35rem .5rem', borderRadius: '6px', background: 'rgba(255,255,255,.05)',
-                              border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-                          <span style={{ fontFamily: 'monospace', fontSize: '.9rem', color: u.password_ref ? 'var(--text-main)' : 'var(--text-muted)',
-                            letterSpacing: showPasswords ? '0' : '.1em', minWidth: '90px', display: 'inline-block' }}>
-                            {u.password_ref
-                              ? (showPasswords ? u.password_ref : '•'.repeat(Math.min(u.password_ref.length, 10)))
-                              : <span style={{ fontSize: '.75rem', fontStyle: 'italic', letterSpacing: 0 }}>Sin registrar</span>
-                            }
-                          </span>
-                          <button onClick={() => startEditPwd(u.id, u.password_ref)}
-                            title="Editar contraseña"
-                            style={{ padding: '.3rem', borderRadius: '6px', background: 'transparent',
-                              border: '1px solid rgba(255,255,255,.08)', color: 'var(--text-muted)', cursor: 'pointer',
-                              display: 'flex', alignItems: 'center', transition: 'all .2s' }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,.4)'; e.currentTarget.style.color = 'var(--accent)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)'; e.currentTarget.style.color = 'var(--text-muted)'; }}>
-                            <Pencil size={13} />
-                          </button>
-                        </div>
-                      )}
+                    <td style={{ padding: '1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+                        <span style={{
+                          fontFamily: 'monospace', fontSize: '.9rem', minWidth: '110px', display: 'inline-block',
+                          color: u.password_ref ? 'var(--text-main)' : 'var(--text-muted)',
+                          letterSpacing: (!showPasswords && u.password_ref) ? '.1em' : 0
+                        }}>
+                          {u.password_ref
+                            ? (showPasswords ? u.password_ref : '•'.repeat(Math.min(u.password_ref.length, 12)))
+                            : <span style={{ fontSize: '.75rem', fontStyle: 'italic', letterSpacing: 0, color: 'var(--text-muted)' }}>Sin registrar</span>
+                          }
+                        </span>
+                        <button onClick={() => openPwdModal(u)} title="Cambiar contraseña"
+                          style={{ padding: '.32rem .5rem', borderRadius: '7px', background: 'rgba(212,175,55,.08)',
+                            border: '1px solid rgba(212,175,55,.2)', color: 'var(--accent)', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '.3rem', fontSize: '.72rem', fontWeight: 600,
+                            transition: 'all .2s', whiteSpace: 'nowrap' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(212,175,55,.18)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(212,175,55,.08)'}>
+                          <KeyRound size={12} /> Cambiar
+                        </button>
+                      </div>
                     </td>
 
                     <td style={{ padding: '1.1rem 1rem' }}>
@@ -242,11 +326,13 @@ function App() {
                           {actionLoading === u.id ? '...' : u.role === 'admin' ? 'Degradar' : 'Hacer Admin'}
                         </button>
                         <button disabled={actionLoading === u.id} onClick={() => toggleStatus(u.id, u.role, u.status)}
-                          className="btn-ghost" style={{ padding: '.35rem .75rem', fontSize: '.78rem', color: u.status === 'inactive' ? '#4ade80' : '#ff9800' }}>
+                          className="btn-ghost" style={{ padding: '.35rem .75rem', fontSize: '.78rem',
+                            color: u.status === 'inactive' ? '#4ade80' : '#ff9800' }}>
                           {actionLoading === u.id ? '...' : u.status === 'inactive' ? 'Habilitar' : 'Inhabilitar'}
                         </button>
                         <button disabled={actionLoading === u.id} onClick={() => deleteUser(u.id, u.full_name || u.username)}
-                          className="btn-ghost" style={{ padding: '.35rem .55rem', color: '#ef4444', border: '1px solid rgba(239,68,68,.2)', background: 'rgba(239,68,68,.05)' }}>
+                          className="btn-ghost" style={{ padding: '.35rem .55rem', color: '#ef4444',
+                            border: '1px solid rgba(239,68,68,.2)', background: 'rgba(239,68,68,.05)' }}>
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -259,7 +345,11 @@ function App() {
         )}
       </div>
 
-      <style>{`.table-row:hover { background: rgba(255,255,255,.02); }`}</style>
+      <style>{`
+        .table-row:hover { background: rgba(255,255,255,.02); }
+        @keyframes slideUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
