@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './utils/supabaseClient';
-import { Shield, Users, Trash2, Search, UserCheck, UserX, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Shield, Users, Trash2, Search, UserCheck, UserX, ShieldCheck, RefreshCw, Eye, EyeOff, Pencil, Check, X } from 'lucide-react';
 
 function App() {
   const [users, setUsers] = useState([]);
@@ -8,15 +8,19 @@ function App() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [actionLoading, setActionLoading] = useState(null);
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [editingPwd, setEditingPwd] = useState(null); // userId being edited
+  const [pwdInput, setPwdInput] = useState('');
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
     setError(null);
-    const { data, error } = await supabase.from('profiles').select('*').order('role', { ascending: false });
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('role', { ascending: false });
     if (error) {
       setError(error.message + ' | code: ' + error.code + ' | details: ' + JSON.stringify(error.details));
     } else {
@@ -53,6 +57,26 @@ function App() {
     const { error } = await supabase.rpc('delete_user_by_admin', { user_to_delete: userId });
     if (error) alert('Error eliminando: ' + error.message);
     else await fetchUsers();
+    setActionLoading(null);
+  };
+
+  const startEditPwd = (userId, currentPwd) => {
+    setEditingPwd(userId);
+    setPwdInput(currentPwd || '');
+  };
+
+  const savePwd = async (userId) => {
+    setActionLoading(userId + '-pwd');
+    const { error } = await supabase
+      .from('profiles')
+      .update({ password_ref: pwdInput.trim() || null })
+      .eq('id', userId);
+    if (error) alert('Error guardando contraseña: ' + error.message);
+    else {
+      setEditingPwd(null);
+      setPwdInput('');
+      await fetchUsers();
+    }
     setActionLoading(null);
   };
 
@@ -101,6 +125,15 @@ function App() {
           <input placeholder="Buscar por nombre o correo..." value={search} onChange={e => setSearch(e.target.value)}
             style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-main)', width: '100%', fontSize: '.95rem' }} />
         </div>
+        <button onClick={() => setShowPasswords(!showPasswords)} className="btn-ghost" style={{
+          padding: '.8rem 1.2rem',
+          color: showPasswords ? 'var(--accent)' : 'var(--text-muted)',
+          borderColor: showPasswords ? 'rgba(212,175,55,.4)' : 'var(--border)',
+          background: showPasswords ? 'rgba(212,175,55,.08)' : 'var(--glass)'
+        }}>
+          {showPasswords ? <EyeOff size={16} /> : <Eye size={16} />}
+          <span>{showPasswords ? 'Ocultar' : 'Ver'} contraseñas</span>
+        </button>
         <button onClick={fetchUsers} disabled={loading} className="btn-ghost" style={{ padding: '.8rem 1.2rem' }}>
           <RefreshCw size={16} /> <span>Actualizar</span>
         </button>
@@ -119,20 +152,16 @@ function App() {
             <div style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: '12px', padding: '1.5rem', maxWidth: '700px', margin: '0 auto', textAlign: 'left', fontSize: '.85rem', fontFamily: 'monospace', color: '#f87171', lineHeight: '1.6', wordBreak: 'break-all' }}>
               {error}
             </div>
-            <div style={{ marginTop: '1.5rem', fontSize: '.8rem', color: 'var(--text-muted)' }}>
-              <p>URL: <strong style={{ color: '#fff' }}>{import.meta.env.VITE_SUPABASE_URL || 'NO CONFIGURADA'}</strong></p>
-              <p style={{ marginTop: '.3rem' }}>KEY: <strong style={{ color: '#fff' }}>{import.meta.env.VITE_SUPABASE_ANON_KEY ? `SÍ (${import.meta.env.VITE_SUPABASE_ANON_KEY.length} chars)` : 'NO CONFIGURADA'}</strong></p>
-            </div>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '5rem 0', color: 'var(--text-muted)' }}>No se encontraron usuarios.</div>
         ) : (
-          <div style={{ minWidth: '860px' }}>
+          <div style={{ minWidth: '900px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', fontSize: '.82rem', textTransform: 'uppercase', letterSpacing: '.05em' }}>
                   <th style={{ padding: '1rem' }}>Miembro</th>
-                  <th style={{ padding: '1rem' }}>Email</th>
+                  <th style={{ padding: '1rem' }}>Email / Usuario</th>
                   <th style={{ padding: '1rem' }}>Contraseña</th>
                   <th style={{ padding: '1rem' }}>Estado</th>
                   <th style={{ padding: '1rem' }}>Rol</th>
@@ -143,11 +172,55 @@ function App() {
                 {filtered.map(u => (
                   <tr key={u.id} className="table-row" style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '1.1rem 1rem', fontWeight: 600 }}>{u.full_name || 'Sin nombre'}</td>
-                    <td style={{ padding: '1.1rem 1rem', color: 'var(--text-muted)', fontSize: '.9rem' }}>{u.username}</td>
-                    <td style={{ padding: '1.1rem 1rem', fontFamily: 'monospace', color: 'var(--text-muted)' }}>
-                      ••••••••
-                      <span style={{ display: 'block', fontSize: '.6rem', color: 'var(--accent)', opacity: .7 }}>Bcrypt</span>
+                    <td style={{ padding: '1.1rem 1rem', color: 'var(--text-muted)', fontSize: '.88rem' }}>{u.username}</td>
+
+                    {/* Password cell */}
+                    <td style={{ padding: '.7rem 1rem' }}>
+                      {editingPwd === u.id ? (
+                        <div style={{ display: 'flex', gap: '.4rem', alignItems: 'center' }}>
+                          <input
+                            value={pwdInput}
+                            onChange={e => setPwdInput(e.target.value)}
+                            placeholder="Escribe la contraseña..."
+                            style={{ padding: '.35rem .7rem', fontSize: '.85rem', borderRadius: '7px',
+                              background: 'rgba(0,0,0,.3)', border: '1px solid rgba(212,175,55,.4)',
+                              color: 'var(--text-main)', outline: 'none', width: '160px' }}
+                            autoFocus
+                            onKeyDown={e => { if (e.key === 'Enter') savePwd(u.id); if (e.key === 'Escape') { setEditingPwd(null); setPwdInput(''); } }}
+                          />
+                          <button onClick={() => savePwd(u.id)} disabled={actionLoading === u.id + '-pwd'}
+                            style={{ padding: '.35rem .5rem', borderRadius: '6px', background: 'rgba(34,197,94,.15)',
+                              border: '1px solid rgba(34,197,94,.3)', color: '#4ade80', cursor: 'pointer' }}>
+                            <Check size={14} />
+                          </button>
+                          <button onClick={() => { setEditingPwd(null); setPwdInput(''); }}
+                            style={{ padding: '.35rem .5rem', borderRadius: '6px', background: 'rgba(255,255,255,.05)',
+                              border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '.9rem', color: u.password_ref ? 'var(--text-main)' : 'var(--text-muted)',
+                            letterSpacing: showPasswords ? '0' : '.1em', minWidth: '90px', display: 'inline-block' }}>
+                            {u.password_ref
+                              ? (showPasswords ? u.password_ref : '•'.repeat(Math.min(u.password_ref.length, 10)))
+                              : <span style={{ fontSize: '.75rem', fontStyle: 'italic', letterSpacing: 0 }}>Sin registrar</span>
+                            }
+                          </span>
+                          <button onClick={() => startEditPwd(u.id, u.password_ref)}
+                            title="Editar contraseña"
+                            style={{ padding: '.3rem', borderRadius: '6px', background: 'transparent',
+                              border: '1px solid rgba(255,255,255,.08)', color: 'var(--text-muted)', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', transition: 'all .2s' }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,.4)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)'; e.currentTarget.style.color = 'var(--text-muted)'; }}>
+                            <Pencil size={13} />
+                          </button>
+                        </div>
+                      )}
                     </td>
+
                     <td style={{ padding: '1.1rem 1rem' }}>
                       <span style={{ padding: '3px 9px', borderRadius: '10px', fontSize: '.72rem', fontWeight: 700, textTransform: 'uppercase',
                         background: u.status === 'inactive' ? 'rgba(239,68,68,.15)' : 'rgba(34,197,94,.15)',
