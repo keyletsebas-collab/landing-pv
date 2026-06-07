@@ -1,14 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Cliente normal (anon) — para leer profiles
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+const URL = import.meta.env.VITE_SUPABASE_URL;
+const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SERVICE = import.meta.env.VITE_SUPABASE_SERVICE_KEY;
 
-// Cliente admin (service role) — para cambiar contraseñas de Auth
-export const supabaseAdmin = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_SERVICE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+// Cliente normal (lectura de profiles)
+export const supabase = createClient(URL, ANON);
+
+// Cliente admin (cambio de contraseñas en Auth)
+// Solo se crea si la service key está configurada
+export const supabaseAdmin = SERVICE && SERVICE !== 'TU_SERVICE_ROLE_KEY_AQUI'
+  ? createClient(URL, SERVICE, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+  : null;

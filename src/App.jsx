@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase, supabaseAdmin } from './utils/supabaseClient';
 import {
   Shield, Users, Trash2, Search, UserCheck, UserX, ShieldCheck,
-  RefreshCw, Eye, EyeOff, KeyRound, Check, X, Loader2
+  RefreshCw, Eye, EyeOff, KeyRound, Check, X, Loader2, AlertTriangle
 } from 'lucide-react';
+
+const ADMIN_READY = !!supabaseAdmin;
+
 
 function App() {
   const [users, setUsers]           = useState([]);
@@ -77,6 +80,10 @@ function App() {
   };
 
   const changePassword = async () => {
+    if (!ADMIN_READY) {
+      setPwdError('Service key no configurada. Agrega VITE_SUPABASE_SERVICE_KEY en Vercel.');
+      return;
+    }
     if (!newPwd || newPwd.length < 6) {
       setPwdError('La contraseña debe tener al menos 6 caracteres.');
       return;
@@ -198,6 +205,20 @@ function App() {
         </div>
       )}
 
+      {/* Service key warning banner */}
+      {!ADMIN_READY && (
+        <div style={{ marginBottom: '1.5rem', padding: '1rem 1.4rem', display: 'flex', alignItems: 'center', gap: '1rem',
+          background: 'rgba(251,191,36,.08)', border: '1px solid rgba(251,191,36,.3)', borderRadius: '12px' }}>
+          <AlertTriangle size={18} color="#fbbf24" style={{ flexShrink: 0 }} />
+          <div style={{ fontSize: '.85rem' }}>
+            <span style={{ fontWeight: 700, color: '#fbbf24' }}>Cambio de contraseñas desactivado — </span>
+            <span style={{ color: 'var(--text-muted)' }}>Agrega </span>
+            <code style={{ background: 'rgba(255,255,255,.08)', padding: '1px 6px', borderRadius: '4px', fontSize: '.8rem', color: '#f0ebe2' }}>VITE_SUPABASE_SERVICE_KEY</code>
+            <span style={{ color: 'var(--text-muted)' }}> en Vercel → Settings → Environment Variables y redeploya.</span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '3rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
         <div style={{ padding: '10px', background: 'var(--accent)', borderRadius: '12px', color: '#000' }}>
@@ -293,13 +314,17 @@ function App() {
                             : <span style={{ fontSize: '.75rem', fontStyle: 'italic', letterSpacing: 0, color: 'var(--text-muted)' }}>Sin registrar</span>
                           }
                         </span>
-                        <button onClick={() => openPwdModal(u)} title="Cambiar contraseña"
-                          style={{ padding: '.32rem .5rem', borderRadius: '7px', background: 'rgba(212,175,55,.08)',
-                            border: '1px solid rgba(212,175,55,.2)', color: 'var(--accent)', cursor: 'pointer',
+                        <button onClick={() => ADMIN_READY && openPwdModal(u)}
+                          title={ADMIN_READY ? 'Cambiar contraseña' : 'Configura VITE_SUPABASE_SERVICE_KEY en Vercel'}
+                          style={{ padding: '.32rem .5rem', borderRadius: '7px',
+                            background: ADMIN_READY ? 'rgba(212,175,55,.08)' : 'rgba(255,255,255,.03)',
+                            border: ADMIN_READY ? '1px solid rgba(212,175,55,.2)' : '1px solid var(--border)',
+                            color: ADMIN_READY ? 'var(--accent)' : 'var(--text-muted)',
+                            cursor: ADMIN_READY ? 'pointer' : 'not-allowed',
                             display: 'flex', alignItems: 'center', gap: '.3rem', fontSize: '.72rem', fontWeight: 600,
-                            transition: 'all .2s', whiteSpace: 'nowrap' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(212,175,55,.18)'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(212,175,55,.08)'}>
+                            transition: 'all .2s', whiteSpace: 'nowrap', opacity: ADMIN_READY ? 1 : 0.45 }}
+                          onMouseEnter={e => ADMIN_READY && (e.currentTarget.style.background = 'rgba(212,175,55,.18)')}
+                          onMouseLeave={e => ADMIN_READY && (e.currentTarget.style.background = 'rgba(212,175,55,.08)')}>
                           <KeyRound size={12} /> Cambiar
                         </button>
                       </div>
